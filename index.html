@@ -39,6 +39,30 @@
     input[type=range] {
       width: 100px;
     }
+    /* simple modal menu */
+    #projectMenu {
+      display:none;
+      position:fixed;
+      top:0; left:0; right:0; bottom:0;
+      background:rgba(0,0,0,0.8);
+      color:#0f0;
+      justify-content:center;
+      align-items:center;
+      flex-direction:column;
+      z-index:999;
+    }
+    #projectMenu div {
+      background:#111;
+      border:1px solid #0f0;
+      padding:20px;
+      border-radius:10px;
+      max-width:300px;
+      max-height:400px;
+      overflow:auto;
+    }
+    #projectMenu button {
+      margin-top:10px;
+    }
   </style>
 </head>
 <body>
@@ -70,14 +94,26 @@
     <option value="fill">Filled</option>
   </select>
 
-  <!-- New width/height inputs -->
   <label>Canvas W: <input type="number" id="canvasWidth" value="1024" min="1"></label>
   <label>Canvas H: <input type="number" id="canvasHeight" value="576" min="1"></label>
   <button onclick="resizeCanvas()">resize</button>
 
+  <button onclick="resizeImagesProportionally()">resize imgs</button>
+  <button onclick="saveProject()">save</button>
+  <button onclick="openProjectMenu()">load</button>
   <button onclick="downloadImage()">download</button>
 </div>
+
 <canvas id="canvas" width="1024" height="576"></canvas>
+
+<!-- Project menu -->
+<div id="projectMenu">
+  <div>
+    <h3>Saved Projects</h3>
+    <div id="projectList"></div>
+    <button onclick="closeProjectMenu()">Close</button>
+  </div>
+</div>
 
 <script>
 const canvas = document.getElementById("canvas");
@@ -109,7 +145,7 @@ function handleImage(e) {
   reader.onload = function(event) {
     const img = new Image();
     img.onload = function() {
-      objects.push({type:"image", img, x:50, y:50, width:img.width/2, height:img.height/2, scaleX:1, scaleY:1});
+      objects.push({type:"image", img, src:img.src, x:50, y:50, width:img.width/2, height:img.height/2, scaleX:1, scaleY:1});
       redraw();
     }
     img.src = event.target.result;
@@ -247,15 +283,81 @@ function redraw(){
   }
 }
 
-// 🔹 New: resize canvas while preserving objects
+// === Canvas + project functions ===
 function resizeCanvas(){
   const newWidth = parseInt(document.getElementById("canvasWidth").value);
   const newHeight = parseInt(document.getElementById("canvasHeight").value);
-
   canvas.width = newWidth;
   canvas.height = newHeight;
+  redraw();
+}
 
-  redraw(); // re-render stored objects at new size
+function resizeImagesProportionally(){
+  for(let obj of objects){
+    if(obj.type==="image"){
+      let ratio = Math.min(canvas.width / obj.width, canvas.height / obj.height);
+      obj.width *= ratio;
+      obj.height *= ratio;
+      obj.scaleX = 1;
+      obj.scaleY = 1;
+    }
+  }
+  redraw();
+}
+
+function saveProject(){
+  const name = prompt("Project name?");
+  if(!name) return;
+  const data = {
+    width: canvas.width,
+    height: canvas.height,
+    objects: objects.map(o=>{
+      let copy = {...o};
+      if(o.type==="image") copy.src = o.src; // save src instead of img object
+      return copy;
+    })
+  };
+  localStorage.setItem("project_"+name, JSON.stringify(data));
+  alert("Saved as "+name);
+}
+
+function openProjectMenu(){
+  const menu = document.getElementById("projectMenu");
+  const list = document.getElementById("projectList");
+  list.innerHTML="";
+  for(let key in localStorage){
+    if(key.startsWith("project_")){
+      let projName = key.replace("project_","");
+      const btn = document.createElement("button");
+      btn.textContent = projName;
+      btn.onclick = ()=>{ loadProject(key); closeProjectMenu(); };
+      list.appendChild(btn);
+      list.appendChild(document.createElement("br"));
+    }
+  }
+  menu.style.display="flex";
+}
+function closeProjectMenu(){
+  document.getElementById("projectMenu").style.display="none";
+}
+
+function loadProject(key){
+  const raw = localStorage.getItem(key);
+  if(!raw) return;
+  const data = JSON.parse(raw);
+  canvas.width = data.width;
+  canvas.height = data.height;
+  document.getElementById("canvasWidth").value = data.width;
+  document.getElementById("canvasHeight").value = data.height;
+  objects = data.objects.map(o=>{
+    if(o.type==="image"){
+      const img = new Image();
+      img.src = o.src;
+      o.img = img;
+    }
+    return o;
+  });
+  redraw();
 }
 
 function downloadImage(){
