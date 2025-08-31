@@ -36,11 +36,10 @@
       display:block;
       margin:0 auto;
     }
-    input[type=range] {
+    input[type=range], input[type=number] {
       width: 100px;
     }
-    /* simple modal menu */
-    #projectMenu {
+    #projectMenu, #deleteModal {
       display:none;
       position:fixed;
       top:0; left:0; right:0; bottom:0;
@@ -51,7 +50,7 @@
       flex-direction:column;
       z-index:999;
     }
-    #projectMenu div {
+    #projectMenu div, #deleteModal div {
       background:#111;
       border:1px solid #0f0;
       padding:20px;
@@ -60,7 +59,7 @@
       max-height:400px;
       overflow:auto;
     }
-    #projectMenu button {
+    #projectMenu button, #deleteModal button {
       margin-top:10px;
     }
   </style>
@@ -115,6 +114,15 @@
   </div>
 </div>
 
+<!-- Delete confirmation modal -->
+<div id="deleteModal">
+  <div>
+    <p>Are you sure you want to delete this? It will be gone forever!</p>
+    <button id="confirmDelete">Yes</button>
+    <button onclick="document.getElementById('deleteModal').style.display='none'">No</button>
+  </div>
+</div>
+
 <script>
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
@@ -125,12 +133,12 @@ let objects = [];
 let selectedObject = null;
 let offsetX, offsetY;
 let startX, startY;
+let currentProject = "autosave";
 
-function setTool(t) {
-  tool = t;
-  selectedObject = null;
-}
+// --- Tool selection ---
+function setTool(t) { tool = t; selectedObject = null; }
 
+// --- Canvas events ---
 canvas.addEventListener("mousedown", startAction);
 canvas.addEventListener("mousemove", doAction);
 canvas.addEventListener("mouseup", endAction);
@@ -157,45 +165,32 @@ function startAction(e) {
   const rect = canvas.getBoundingClientRect();
   const x = e.clientX - rect.left;
   const y = e.clientY - rect.top;
-  startX = x;
-  startY = y;
+  startX = x; startY = y;
 
   const color = document.getElementById("colorPicker").value;
   const size = parseInt(document.getElementById("sizeRange").value);
 
-  if (tool === "brush") {
-    drawing = true;
-    objects.push({type:"brush", points:[{x,y}], color, size});
-  } else if (tool === "eraser") {
-    drawing = true;
-    objects.push({type:"eraser", points:[{x,y}], size});
-  } else if (tool === "text") {
+  if (tool === "brush") { drawing = true; objects.push({type:"brush", points:[{x,y}], color, size}); }
+  else if (tool === "eraser") { drawing = true; objects.push({type:"eraser", points:[{x,y}], size}); }
+  else if (tool === "text") {
     const text = prompt("Enter text:");
-    if(text){
-      objects.push({type:"text", text, x, y, font:document.getElementById("fontSelect").value, color, scaleX:1, scaleY:1});
-      redraw();
-    }
-  } else if(tool === "edit") {
+    if(text){ objects.push({type:"text", text, x, y, font:document.getElementById("fontSelect").value, color, scaleX:1, scaleY:1}); redraw(); }
+  }
+  else if(tool === "edit") {
     selectedObject = objects.find(o => o.type==="text" && x>o.x && x<o.x+100 && y>o.y-30 && y<o.y+30);
-    if(selectedObject){
-      const newText = prompt("Edit text:", selectedObject.text);
-      if(newText!==null) selectedObject.text = newText;
-      redraw();
-    }
-  } else if(tool === "drag" || tool === "warp") {
+    if(selectedObject){ const newText = prompt("Edit text:", selectedObject.text); if(newText!==null) selectedObject.text = newText; redraw(); }
+  }
+  else if(tool==="drag" || tool==="warp") {
     selectedObject = objects.find(o => {
       if(o.type==="text") return x>o.x && x<o.x+100 && y>o.y-30 && y<o.y+30;
       if(o.type==="image") return x>o.x && x<o.x+o.width && y>o.y && y<o.y+o.height;
       if(o.type==="shape") return x>o.x && x<o.x+o.width && y>o.y && y<o.y+o.height;
       return false;
     });
-    if(selectedObject){
-      offsetX = x - selectedObject.x;
-      offsetY = y - selectedObject.y;
-    }
-  } else if(tool==="shape") {
-    objects.push({type:"shape", x, y, width:0, height:0, color, size:parseInt(document.getElementById("shapeRange").value), fill:document.getElementById("shapeFill").value, shape:"rect"});
-  } else if(tool==="picker"){
+    if(selectedObject){ offsetX = x - selectedObject.x; offsetY = y - selectedObject.y; }
+  }
+  else if(tool==="shape") { objects.push({type:"shape", x, y, width:0, height:0, color, size:parseInt(document.getElementById("shapeRange").value), fill:document.getElementById("shapeFill").value, shape:"rect"}); }
+  else if(tool==="picker"){
     const imageData = ctx.getImageData(x, y,1,1).data;
     const hex = `#${((1 << 24) + (imageData[0]<<16) + (imageData[1]<<8) + imageData[2]).toString(16).slice(1)}`;
     document.getElementById("colorPicker").value = hex;
@@ -206,84 +201,32 @@ function doAction(e){
   const rect = canvas.getBoundingClientRect();
   const x = e.clientX - rect.left;
   const y = e.clientY - rect.top;
-  if(drawing){
-    let obj = objects[objects.length-1];
-    if(tool==="brush" || tool==="eraser") obj.points.push({x,y});
+  if(drawing){ let obj = objects[objects.length-1]; if(tool==="brush" || tool==="eraser") obj.points.push({x,y}); redraw(); }
+  else if((tool==="drag" || tool==="warp") && selectedObject){
+    if(tool==="drag"){ selectedObject.x = x - offsetX; selectedObject.y = y - offsetY; }
+    else if(tool==="warp" && selectedObject.type==="text"){ selectedObject.scaleX = (x - selectedObject.x)/100; selectedObject.scaleY = (y - selectedObject.y)/30; }
+    else if(tool==="warp" && selectedObject.type==="image"){ selectedObject.scaleX = (x - selectedObject.x)/selectedObject.width; selectedObject.scaleY = (y - selectedObject.y)/selectedObject.height; }
+    else if(tool==="warp" && selectedObject.type==="shape"){ selectedObject.width = x - selectedObject.x; selectedObject.height = y - selectedObject.y; }
     redraw();
-  } else if((tool==="drag" || tool==="warp") && selectedObject){
-    if(tool==="drag"){
-      selectedObject.x = x - offsetX;
-      selectedObject.y = y - offsetY;
-    } else if(tool==="warp" && selectedObject.type==="text"){
-      selectedObject.scaleX = (x - selectedObject.x)/100;
-      selectedObject.scaleY = (y - selectedObject.y)/30;
-    } else if(tool==="warp" && selectedObject.type==="image"){
-      selectedObject.scaleX = (x - selectedObject.x)/selectedObject.width;
-      selectedObject.scaleY = (y - selectedObject.y)/selectedObject.height;
-    } else if(tool==="warp" && selectedObject.type==="shape"){
-      selectedObject.width = x - selectedObject.x;
-      selectedObject.height = y - selectedObject.y;
-    }
-    redraw();
-  } else if(tool==="shape"){
-    let obj = objects[objects.length-1];
-    obj.width = x - startX;
-    obj.height = y - startY;
-    redraw();
-  }
+  } else if(tool==="shape"){ let obj = objects[objects.length-1]; obj.width = x - startX; obj.height = y - startY; redraw(); }
 }
 
-function endAction(){
-  drawing=false;
-  selectedObject=null;
-}
+function endAction(){ drawing=false; selectedObject=null; }
 
+// --- Redraw ---
 function redraw(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
   for(let obj of objects){
-    if(obj.type==="brush"){
-      ctx.strokeStyle=obj.color;
-      ctx.lineWidth=obj.size;
-      ctx.beginPath();
-      ctx.moveTo(obj.points[0].x,obj.points[0].y);
-      for(let p of obj.points) ctx.lineTo(p.x,p.y);
-      ctx.stroke();
-    } else if(obj.type==="eraser"){
-      ctx.strokeStyle="#222";
-      ctx.lineWidth=obj.size;
-      ctx.beginPath();
-      ctx.moveTo(obj.points[0].x,obj.points[0].y);
-      for(let p of obj.points) ctx.lineTo(p.x,p.y);
-      ctx.stroke();
-    } else if(obj.type==="text"){
-      ctx.save();
-      ctx.translate(obj.x,obj.y);
-      ctx.scale(obj.scaleX,obj.scaleY);
-      ctx.font=`20px ${obj.font}`;
-      ctx.fillStyle=obj.color;
-      ctx.fillText(obj.text,0,0);
-      ctx.restore();
-    } else if(obj.type==="image"){
-      ctx.save();
-      ctx.translate(obj.x,obj.y);
-      ctx.scale(obj.scaleX,obj.scaleY);
-      ctx.drawImage(obj.img,0,0,obj.width,obj.height);
-      ctx.restore();
-    } else if(obj.type==="shape"){
-      ctx.beginPath();
-      if(obj.fill==="fill"){
-        ctx.fillStyle=obj.color;
-        ctx.fillRect(obj.x,obj.y,obj.width,obj.height);
-      } else {
-        ctx.strokeStyle=obj.color;
-        ctx.lineWidth=obj.size;
-        ctx.strokeRect(obj.x,obj.y,obj.width,obj.height);
-      }
-    }
+    if(obj.type==="brush"){ ctx.strokeStyle=obj.color; ctx.lineWidth=obj.size; ctx.beginPath(); ctx.moveTo(obj.points[0].x,obj.points[0].y); for(let p of obj.points) ctx.lineTo(p.x,p.y); ctx.stroke(); }
+    else if(obj.type==="eraser"){ ctx.strokeStyle="#222"; ctx.lineWidth=obj.size; ctx.beginPath(); ctx.moveTo(obj.points[0].x,obj.points[0].y); for(let p of obj.points) ctx.lineTo(p.x,p.y); ctx.stroke(); }
+    else if(obj.type==="text"){ ctx.save(); ctx.translate(obj.x,obj.y); ctx.scale(obj.scaleX,obj.scaleY); ctx.font=`20px ${obj.font}`; ctx.fillStyle=obj.color; ctx.fillText(obj.text,0,0); ctx.restore(); }
+    else if(obj.type==="image"){ ctx.save(); ctx.translate(obj.x,obj.y); ctx.scale(obj.scaleX,obj.scaleY); ctx.drawImage(obj.img,0,0,obj.width,obj.height); ctx.restore(); }
+    else if(obj.type==="shape"){ ctx.beginPath(); if(obj.fill==="fill"){ ctx.fillStyle=obj.color; ctx.fillRect(obj.x,obj.y,obj.width,obj.height); } else { ctx.strokeStyle=obj.color; ctx.lineWidth=obj.size; ctx.strokeRect(obj.x,obj.y,obj.width,obj.height); } }
   }
+  autosave();
 }
 
-// === Canvas + project functions ===
+// --- Canvas resize ---
 function resizeCanvas(){
   const newWidth = parseInt(document.getElementById("canvasWidth").value);
   const newHeight = parseInt(document.getElementById("canvasHeight").value);
@@ -292,35 +235,46 @@ function resizeCanvas(){
   redraw();
 }
 
+// --- Resize images proportionally ---
 function resizeImagesProportionally(){
   for(let obj of objects){
     if(obj.type==="image"){
       let ratio = Math.min(canvas.width / obj.width, canvas.height / obj.height);
       obj.width *= ratio;
       obj.height *= ratio;
-      obj.scaleX = 1;
-      obj.scaleY = 1;
+      obj.scaleX = 1; obj.scaleY = 1;
+      obj.x = (canvas.width - obj.width)/2;
+      obj.y = (canvas.height - obj.height)/2;
     }
   }
   redraw();
 }
 
+// --- Save / Autosave ---
 function saveProject(){
   const name = prompt("Project name?");
   if(!name) return;
+  currentProject = name;
+  saveToLocalStorage(name);
+  alert("Saved as "+name);
+}
+
+function autosave(){ saveToLocalStorage(currentProject); }
+
+function saveToLocalStorage(name){
   const data = {
     width: canvas.width,
     height: canvas.height,
     objects: objects.map(o=>{
       let copy = {...o};
-      if(o.type==="image") copy.src = o.src; // save src instead of img object
+      if(o.type==="image") copy.src = o.src;
       return copy;
     })
   };
   localStorage.setItem("project_"+name, JSON.stringify(data));
-  alert("Saved as "+name);
 }
 
+// --- Load / Project Menu ---
 function openProjectMenu(){
   const menu = document.getElementById("projectMenu");
   const list = document.getElementById("projectList");
@@ -330,36 +284,51 @@ function openProjectMenu(){
       let projName = key.replace("project_","");
       const btn = document.createElement("button");
       btn.textContent = projName;
-      btn.onclick = ()=>{ loadProject(key); closeProjectMenu(); };
+      btn.onclick = ()=>{ loadProject(key); closeProjectMenu(); currentProject = projName; };
+
+      const delBtn = document.createElement("button");
+      delBtn.textContent = "🗑";
+      delBtn.style.marginLeft="5px";
+      delBtn.onclick = (e)=>{
+        e.stopPropagation();
+        confirmDelete(key);
+      }
+
       list.appendChild(btn);
+      list.appendChild(delBtn);
       list.appendChild(document.createElement("br"));
     }
   }
   menu.style.display="flex";
 }
-function closeProjectMenu(){
-  document.getElementById("projectMenu").style.display="none";
-}
+function closeProjectMenu(){ document.getElementById("projectMenu").style.display="none"; }
 
 function loadProject(key){
   const raw = localStorage.getItem(key);
   if(!raw) return;
   const data = JSON.parse(raw);
-  canvas.width = data.width;
-  canvas.height = data.height;
+  canvas.width = data.width; canvas.height = data.height;
   document.getElementById("canvasWidth").value = data.width;
   document.getElementById("canvasHeight").value = data.height;
   objects = data.objects.map(o=>{
-    if(o.type==="image"){
-      const img = new Image();
-      img.src = o.src;
-      o.img = img;
-    }
+    if(o.type==="image"){ const img = new Image(); img.src=o.src; o.img=img; }
     return o;
   });
   redraw();
 }
 
+// --- Delete project ---
+function confirmDelete(key){
+  const modal = document.getElementById("deleteModal");
+  modal.style.display="flex";
+  document.getElementById("confirmDelete").onclick = ()=>{
+    localStorage.removeItem(key);
+    modal.style.display="none";
+    openProjectMenu(); 
+  }
+}
+
+// --- Download ---
 function downloadImage(){
   canvas.toBlob(blob => {
     const link = document.createElement("a");
@@ -368,6 +337,9 @@ function downloadImage(){
     link.click();
   }, "image/png");
 }
+
+// --- Autosave on tab/window blur ---
+window.addEventListener("blur", () => { autosave(); });
 </script>
 </body>
 </html>
