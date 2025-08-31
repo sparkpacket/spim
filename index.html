@@ -217,11 +217,54 @@ function endAction(){ drawing=false; selectedObject=null; }
 function redraw(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
   for(let obj of objects){
-    if(obj.type==="brush"){ ctx.strokeStyle=obj.color; ctx.lineWidth=obj.size; ctx.beginPath(); ctx.moveTo(obj.points[0].x,obj.points[0].y); for(let p of obj.points) ctx.lineTo(p.x,p.y); ctx.stroke(); }
-    else if(obj.type==="eraser"){ ctx.strokeStyle="#222"; ctx.lineWidth=obj.size; ctx.beginPath(); ctx.moveTo(obj.points[0].x,obj.points[0].y); for(let p of obj.points) ctx.lineTo(p.x,p.y); ctx.stroke(); }
-    else if(obj.type==="text"){ ctx.save(); ctx.translate(obj.x,obj.y); ctx.scale(obj.scaleX,obj.scaleY); ctx.font=`20px ${obj.font}`; ctx.fillStyle=obj.color; ctx.fillText(obj.text,0,0); ctx.restore(); }
-    else if(obj.type==="image"){ ctx.save(); ctx.translate(obj.x,obj.y); ctx.scale(obj.scaleX,obj.scaleY); ctx.drawImage(obj.img,0,0,obj.width,obj.height); ctx.restore(); }
-    else if(obj.type==="shape"){ ctx.beginPath(); if(obj.fill==="fill"){ ctx.fillStyle=obj.color; ctx.fillRect(obj.x,obj.y,obj.width,obj.height); } else { ctx.strokeStyle=obj.color; ctx.lineWidth=obj.size; ctx.strokeRect(obj.x,obj.y,obj.width,obj.height); } }
+    if(obj.type==="brush"){
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.strokeStyle=obj.color; 
+      ctx.lineWidth=obj.size; 
+      ctx.beginPath(); 
+      ctx.moveTo(obj.points[0].x,obj.points[0].y); 
+      for(let p of obj.points) ctx.lineTo(p.x,p.y); 
+      ctx.stroke();
+    }
+    else if(obj.type==="eraser"){
+      ctx.globalCompositeOperation = 'destination-out'; // ← this actually erases
+      ctx.lineWidth=obj.size; 
+      ctx.beginPath(); 
+      ctx.moveTo(obj.points[0].x,obj.points[0].y); 
+      for(let p of obj.points) ctx.lineTo(p.x,p.y); 
+      ctx.stroke();
+      ctx.globalCompositeOperation = 'source-over'; // ← reset
+    }
+    else if(obj.type==="text"){ 
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.save(); 
+      ctx.translate(obj.x,obj.y); 
+      ctx.scale(obj.scaleX,obj.scaleY); 
+      ctx.font=`20px ${obj.font}`; 
+      ctx.fillStyle=obj.color; 
+      ctx.fillText(obj.text,0,0); 
+      ctx.restore(); 
+    }
+    else if(obj.type==="image"){ 
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.save(); 
+      ctx.translate(obj.x,obj.y); 
+      ctx.scale(obj.scaleX,obj.scaleY); 
+      ctx.drawImage(obj.img,0,0,obj.width,obj.height); 
+      ctx.restore(); 
+    }
+    else if(obj.type==="shape"){ 
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.beginPath(); 
+      if(obj.fill==="fill"){ 
+        ctx.fillStyle=obj.color; 
+        ctx.fillRect(obj.x,obj.y,obj.width,obj.height); 
+      } else { 
+        ctx.strokeStyle=obj.color; 
+        ctx.lineWidth=obj.size; 
+        ctx.strokeRect(obj.x,obj.y,obj.width,obj.height); 
+      } 
+    }
   }
   autosave();
 }
